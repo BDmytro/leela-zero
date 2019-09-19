@@ -1,6 +1,6 @@
 /*
     This file is part of Leela Zero.
-    Copyright (C) 2018 Gian-Carlo Pascutto and contributors
+    Copyright (C) 2018-2019 Gian-Carlo Pascutto and contributors
 
     Leela Zero is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -14,6 +14,17 @@
 
     You should have received a copy of the GNU General Public License
     along with Leela Zero.  If not, see <http://www.gnu.org/licenses/>.
+
+    Additional permission under GNU GPL version 3 section 7
+
+    If you modify this Program, or any covered work, by linking or
+    combining it with NVIDIA Corporation's libraries from the
+    NVIDIA CUDA Toolkit and/or the NVIDIA CUDA Deep Neural
+    Network library and/or the NVIDIA TensorRT inference library
+    (or a modified version of those libraries), containing parts covered
+    by the terms of the respective license agreement, the licensors of
+    this Program grant you additional permission to convey the resulting
+    work.
 */
 
 #include "config.h"
@@ -66,7 +77,7 @@ UCTNodePointer::UCTNodePointer(std::int16_t vertex, float policy) {
     auto i_vertex = static_cast<std::uint16_t>(vertex);
     std::memcpy(&i_policy, &policy, sizeof(i_policy));
 
-    m_data =  (static_cast<std::uint64_t>(i_policy)  << 32)
+    m_data =  (static_cast<std::uint64_t>(i_policy) << 32)
             | (static_cast<std::uint64_t>(i_vertex) << 16);
     increment_tree_size(sizeof(UCTNodePointer));
 }
@@ -94,8 +105,9 @@ void UCTNodePointer::inflate() const {
         if (is_inflated(v)) return;
 
         auto v2 = reinterpret_cast<std::uint64_t>(
-            new UCTNode(read_vertex(v), read_policy(v))
-        ) | POINTER;
+            new UCTNode(read_vertex(v), read_policy(v)));
+        assert((v2 & 3ULL) == 0);
+        v2 |= POINTER;
         bool success = m_data.compare_exchange_strong(v, v2);
         if (success) {
             increment_tree_size(sizeof(UCTNode));
@@ -124,6 +136,12 @@ float UCTNodePointer::get_policy() const {
     auto v = m_data.load();
     if (is_inflated(v)) return read_ptr(v)->get_policy();
     return read_policy(v);
+}
+
+float UCTNodePointer::get_eval_lcb(int color) const {
+    assert(is_inflated());
+    auto v = m_data.load();
+    return read_ptr(v)->get_eval_lcb(color);
 }
 
 bool UCTNodePointer::active() const {
